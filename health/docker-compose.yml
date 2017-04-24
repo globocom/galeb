@@ -1,0 +1,49 @@
+db:
+    image: mysql:5.6
+    environment:
+        MYSQL_ROOT_PASSWORD: password
+        MYSQL_DATABASE: galeb_test
+    ports:
+      - 3306:3306
+
+redis:
+    image: redis:2.8
+    ports:
+      - 6379:6379
+
+manager:
+    image: galebmanager_manager
+    environment:
+        GALEB_DB_URL: jdbc:mysql://mysql.local:3306/galeb_test
+        GALEB_DB_DRIVER: com.mysql.jdbc.Driver
+        GALEB_DB_USER: root
+        GALEB_DB_PASS: password
+        REDIS_HOSTNAME: redis.local
+    ports:
+      - 8000:8000
+    links:
+      - db:mysql.local
+      - redis:redis.local
+
+sserver1:
+    image: sserver_sserver
+    environment:
+        PORT: 8081
+
+sserver2:
+    image: sserver_sserver
+    environment:
+        PORT: 8081
+
+health:
+    build: .
+    dockerfile: Dockerfile
+    environment:
+        MANAGER_URL: http://manager.local:8000
+    volumes:
+      - /tmp:/tmp
+    links:
+      - manager:manager.local
+      - sserver1:sserver1.local
+      - sserver2:sserver2.local
+
