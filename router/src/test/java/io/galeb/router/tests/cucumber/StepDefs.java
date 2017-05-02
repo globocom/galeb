@@ -1,11 +1,27 @@
 
+/*
+ * Copyright (c) 2014-2017 Globo.com - ATeam
+ * All rights reserved.
+ *
+ * This source is subject to the Apache License, Version 2.0.
+ * Please see the LICENSE file for more information.
+ *
+ * Authors: See AUTHORS file
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.galeb.router.tests.cucumber;
 
 import cucumber.api.java.en.And;
 import cucumber.api.java.en.Given;
 import cucumber.api.java.eo.Do;
+import io.galeb.core.enums.SystemEnv;
 import io.galeb.router.Application;
-import io.galeb.router.SystemEnvs;
 import io.galeb.router.tests.backend.SimulatedBackendService;
 import io.galeb.router.tests.client.HttpClient;
 import io.galeb.router.tests.client.JmxClientService;
@@ -45,7 +61,7 @@ public class StepDefs {
 
     private Response response;
     private String method;
-    private Uri uri = Uri.create("http://127.0.0.1:" + SystemEnvs.ROUTER_PORT.getValue());
+    private Uri uri = Uri.create("http://127.0.0.1:" + SystemEnv.ROUTER_PORT.getValue());
     private final InetAddress address= InetAddress.getLocalHost();
     private final HttpHeaders headers = new DefaultHttpHeaders();
 
@@ -85,6 +101,8 @@ public class StepDefs {
 
     @Given("^a (.+) host request to (.+) backend$")
     public void withHostRequester(String expression, String backendBehavior) throws Throwable {
+        response = null;
+        backendService.stop();
         backendService.setResponseBehavior(SimulatedBackendService.ResponseBehavior.valueOf(backendBehavior)).start();
         this.headers.add("host", ("valid".equals(expression) ? "test.com" : expression));
     }
@@ -98,7 +116,7 @@ public class StepDefs {
 
     @Do("^Do (.+) (.+)$")
     public void sendMethodPath(String method, String path) throws Throwable {
-        this.uri = Uri.create("http://127.0.0.1:" + SystemEnvs.ROUTER_PORT.getValue() + path);
+        this.uri = Uri.create("http://127.0.0.1:" + SystemEnv.ROUTER_PORT.getValue() + path);
         this.method = method;
     }
 
@@ -108,23 +126,27 @@ public class StepDefs {
         assertThat(response.getStatusCode(), is(status));
     }
 
-    @Do("^body is (.+)")
-    public void bodyIs(String body) throws Throwable {
-        assertThat(response.getResponseBody(), equalTo(body));
+    @Do("^body is (\\w* )?(.+)")
+    public void bodyIs(String inverter, String body) throws Throwable {
+        assertThat(response.getResponseBody(), inverter != null ? not(equalTo(body)) : equalTo(body));
     }
 
-    @Do("^has (\\d+) active connections$")
-    public void hasXActiveConnections(long count) {
-        assertThat(jmxClientService.getValue("ActiveConnections"), equalTo(count));
+    @Do("^jmx has ActiveConnections$")
+    public void jmxHasActiveConnections() {
+        if (jmxClientService.isEnabled()) {
+            assertThat(jmxClientService.getValue("ActiveConnections"), notNullValue());
+        }
     }
 
-    @Do("^has (\\d+) active requests")
-    public void hasXActiveRequests(long count) {
-        assertThat(jmxClientService.getValue("ActiveRequests"), equalTo(count));
+    @Do("^jmx has ActiveRequests$")
+    public void jmxHasActiveRequests() {
+        if (jmxClientService.isEnabled()) {
+            assertThat(jmxClientService.getValue("ActiveRequests"), notNullValue());
+        }
     }
 
-    @And("^has not (\\d+) active requests$")
-    public void hasNotActiveRequests(int count) throws Throwable {
-        assertThat(jmxClientService.getValue("ActiveRequests"), not(equalTo(count)));
+    @And("^wait (\\d+) ms$")
+    public void waitMs(long timeWait) throws Throwable {
+        Thread.sleep(timeWait);
     }
 }

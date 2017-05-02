@@ -1,10 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2014-2017 Globo.com - ATeam
+  ~ All rights reserved.
+  ~
+  ~ This source is subject to the Apache License, Version 2.0.
+  ~ Please see the LICENSE file for more information.
+  ~
+  ~ Authors: See AUTHORS file
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>router</artifactId>
+    <artifactId>galeb-router</artifactId>
     <version>${parent.version}</version>
 
     <parent>
@@ -18,14 +34,12 @@
         <java.version>1.8</java.version>
         <jmx.port>5000</jmx.port>
 
-        <undertow.version>1.4.12.Final</undertow.version>
-        <zalando-boot-etcd.version>2.3</zalando-boot-etcd.version>
+        <undertow.version>1.4.13.Final</undertow.version>
         <org.apache.logging.log4j.version>2.8.1</org.apache.logging.log4j.version>
         <java-statsd-client.version>3.1.0</java-statsd-client.version>
         <commons-lang3.version>3.4</commons-lang3.version>
         <disruptor.version>3.3.6</disruptor.version>
         <metrics.version>3.2.2</metrics.version>
-        <slf4j.version>1.7.19</slf4j.version>
         <jodd.version>3.8.1</jodd.version>
         <guava.version>21.0</guava.version>
         <asynchttpclient.version>2.1.0-alpha8</asynchttpclient.version>
@@ -40,6 +54,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>io.galeb</groupId>
+            <artifactId>galeb-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
@@ -75,11 +94,6 @@
             <version>${org.apache.logging.log4j.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
-        <dependency>
             <groupId>io.undertow</groupId>
             <artifactId>undertow-core</artifactId>
             <version>${undertow.version}</version>
@@ -88,11 +102,6 @@
             <groupId>org.jodd</groupId>
             <artifactId>jodd-core</artifactId>
             <version>${jodd.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.zalando</groupId>
-            <artifactId>zalando-boot-etcd</artifactId>
-            <version>${zalando-boot-etcd.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -186,6 +195,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <!--suppress MavenModelInspection -->
                     <argLine>
                         ${surefireArgLine}
                         -server

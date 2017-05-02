@@ -1,5 +1,17 @@
-/**
+/*
+ * Copyright (c) 2014-2017 Globo.com - ATeam
+ * All rights reserved.
  *
+ * This source is subject to the Apache License, Version 2.0.
+ * Please see the LICENSE file for more information.
+ *
+ * Authors: See AUTHORS file
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.galeb.router.services;
@@ -7,7 +19,7 @@ package io.galeb.router.services;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
-import io.galeb.router.SystemEnvs;
+import io.galeb.core.enums.SystemEnv;
 import io.undertow.Undertow;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -44,7 +56,7 @@ public class JmxReporterService {
         register.register("BytesReceived", (Gauge<Long>) this::getBytesReceived);
         register.register("BytesSent", (Gauge<Long>) this::getBytesSent);
         final JmxReporter jmxReporter = JmxReporter.forRegistry(register).inDomain(MBEAN_DOMAIN).build();
-        if (Boolean.parseBoolean(SystemEnvs.ENABLE_UNDERTOW_JMX.getValue())) {
+        if (Boolean.parseBoolean(SystemEnv.ENABLE_UNDERTOW_JMX.getValue())) {
             jmxReporter.start();
         }
         return jmxReporter;

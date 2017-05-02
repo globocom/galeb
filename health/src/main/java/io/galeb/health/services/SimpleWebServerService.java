@@ -1,6 +1,22 @@
+/*
+ * Copyright (c) 2014-2017 Globo.com - ATeam
+ * All rights reserved.
+ *
+ * This source is subject to the Apache License, Version 2.0.
+ * Please see the LICENSE file for more information.
+ *
+ * Authors: See AUTHORS file
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.galeb.health.services;
 
-import io.galeb.health.SystemEnvs;
+import io.galeb.core.enums.SystemEnv;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.util.Headers;
@@ -12,7 +28,7 @@ import javax.annotation.PostConstruct;
 @Service
 public class SimpleWebServerService {
 
-    private final int port = Integer.parseInt(SystemEnvs.HEALTH_PORT.getValue());
+    private final int port = Integer.parseInt(SystemEnv.HEALTH_PORT.getValue());
 
     @PostConstruct
     public void init() {
