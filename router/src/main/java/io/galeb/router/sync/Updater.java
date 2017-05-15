@@ -40,12 +40,14 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static io.galeb.router.handlers.PoolHandler.PROP_DISCOVERED_MEMBERS_SIZE;
 
 public class Updater {
     public static final String FULLHASH_PROP = "fullhash";
+    public static final long   WAIT_TIMEOUT  = 10000; // ms
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -60,8 +62,6 @@ public class Updater {
     private int discoveredMembersSize = 1;
     private int newDiscoveredMembersSize = 1;
 
-    private boolean done = false;
-    private long lastDone = 0L;
     private int count = 0;
 
     public Updater(final NameVirtualHostHandler nameVirtualHostHandler,
@@ -74,34 +74,13 @@ public class Updater {
         this.externalDataService = externalDataService;
     }
 
-    public synchronized boolean isDone() {
-        if (lastDone < System.currentTimeMillis() - 30000L) {
-            count = 0;
-            done = true;
-        }
-        return done;
-    }
-
-    public synchronized void sync() {
+    public void sync() {
         newDiscoveredMembersSize = Math.max(externalDataService.members().size(), 1);
-        done = false;
-        lastDone = System.currentTimeMillis();
+        AtomicBoolean wait = new AtomicBoolean(true);
         final ManagerClient.ResultCallBack resultCallBack = result -> {
             FullVirtualhosts virtualhostsFromManager = (FullVirtualhosts) result;
-            List<VirtualHost> virtualhosts;
             if (virtualhostsFromManager != null) {
-                Set<VirtualHost> aliases = new HashSet<>();
-                virtualhosts = Arrays.stream(virtualhostsFromManager._embedded.s)
-                        .map(v -> {
-                            v.getAliases().forEach(aliasName -> {
-                                VirtualHost virtualHostAlias = cloner.copyVirtualHost(v);
-                                virtualHostAlias.setName(aliasName);
-                                aliases.add(virtualHostAlias);
-                            });
-                            return v;
-                        })
-                        .collect(Collectors.toList());
-                virtualhosts.addAll(aliases);
+                final List<VirtualHost> virtualhosts = processVirtualhostsAndAliases(virtualhostsFromManager);
                 logger.info("Processing " + virtualhosts.size() + " virtualhost(s): Check update initialized");
                 cleanup(virtualhosts);
                 virtualhosts.forEach(this::updateCache);
@@ -110,14 +89,35 @@ public class Updater {
                 logger.error("Virtualhosts Empty. Request problem?");
             }
             count = 0;
-            done = true;
             if (discoveredMembersSize != newDiscoveredMembersSize) {
                 logger.warn("DiscoveredMembersSize changed from " + discoveredMembersSize + " to "
                         + newDiscoveredMembersSize + ". Expiring ALL handlers");
             }
             discoveredMembersSize = newDiscoveredMembersSize;
+            wait.set(false);
         };
         managerClient.getVirtualhosts(envName, resultCallBack);
+        // force wait
+        long currentWaitTimeOut = System.currentTimeMillis();
+        while (wait.get()) {
+            if (currentWaitTimeOut < System.currentTimeMillis() - WAIT_TIMEOUT) break;
+        }
+    }
+
+    private List<VirtualHost> processVirtualhostsAndAliases(final FullVirtualhosts virtualhostsFromManager) {
+        final Set<VirtualHost> aliases = new HashSet<>();
+        final List<VirtualHost> virtualhosts = Arrays.stream(virtualhostsFromManager._embedded.s)
+                .map(v -> {
+                    v.getAliases().forEach(aliasName -> {
+                        VirtualHost virtualHostAlias = cloner.copyVirtualHost(v);
+                        virtualHostAlias.setName(aliasName);
+                        aliases.add(virtualHostAlias);
+                    });
+                    return v;
+                })
+                .collect(Collectors.toList());
+        virtualhosts.addAll(aliases);
+        return virtualhosts;
     }
 
     private void cleanup(final List<VirtualHost> virtualhosts) {
@@ -170,7 +170,7 @@ public class Updater {
     }
 
     private void expireHandlers(String virtualhostName) {
-        if ("__ping__".equals(virtualhostName)) return;
+        if ("__ping__".equals(virtualhostName) || "__cache__".equals(virtualhostName)) return;
         if (nameVirtualHostHandler.getHosts().containsKey(virtualhostName)) {
             logger.warn("Virtualhost " + virtualhostName + ": Rebuilding handlers.");
             cleanUpNameVirtualHostHandler(virtualhostName);
@@ -180,14 +180,15 @@ public class Updater {
 
     private void cleanUpNameVirtualHostHandler(String virtualhost) {
         final HttpHandler handler = nameVirtualHostHandler.getHosts().get(virtualhost);
+        RuleTargetHandler ruleTargetHandler = null;
         if (handler instanceof RuleTargetHandler) {
-            HttpHandler ruleTargetNextHandler = ((RuleTargetHandler) handler).getNext();
-            if (ruleTargetNextHandler instanceof IPAddressAccessControlHandler) {
-                ruleTargetNextHandler = ((IPAddressAccessControlHandler)ruleTargetNextHandler).getNext();
-            }
-            if (ruleTargetNextHandler instanceof PathGlobHandler) {
-                cleanUpPathGlobHandler((PathGlobHandler) ruleTargetNextHandler);
-            }
+            ruleTargetHandler = (RuleTargetHandler)handler;
+        }
+        if (handler instanceof IPAddressAccessControlHandler) {
+            ruleTargetHandler = (RuleTargetHandler) ((IPAddressAccessControlHandler) handler).getNext();
+        }
+        if (ruleTargetHandler != null) {
+            cleanUpPathGlobHandler(ruleTargetHandler.getPathGlobHandler());
         }
     }
 

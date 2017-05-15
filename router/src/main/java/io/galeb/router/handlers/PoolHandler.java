@@ -36,9 +36,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 
-import static io.galeb.core.enums.EnumHealthState.*;
-import static io.galeb.core.enums.EnumPropHealth.*;
-
 public class PoolHandler implements HttpHandler {
 
     private static final String CHECK_RULE_HEADER  = "X-Check-Pool";
@@ -144,7 +141,7 @@ public class PoolHandler implements HttpHandler {
     }
 
     private void addTargets(final ExtendedLoadBalancingProxyClient proxyClient) {
-        pool.getTargets().stream().filter(target -> OK.toString().equals(target.getProperties().get(PROP_HEALTHY.value()))).forEach(target -> {
+        pool.getTargets().stream().forEach(target -> {
             String value = target.getName();
             URI uri = URI.create(target.getName());
             proxyClient.addHost(uri);

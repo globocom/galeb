@@ -1,4 +1,7 @@
-VERSION=4.0.0
+VERSION=4.0.1
+
+deploy-snapshot:
+	mvn clean install -DskipTests deploy:deploy -DaltDeploymentRepository=oss-jfrog::default::http://oss.jfrog.org/artifactory/oss-snapshot-local
 
 galeb-next: clean
 	mvn package -DskipTests
@@ -29,7 +32,7 @@ dist: galeb-next
             -m '<galeb@corp.globo.com>' \
             --vendor 'Globo.com' \
             --description 'Galeb $$service service' \
-            -p ../../galeb-$$service-${VERSION}-1.el6.noarch.rpm *jar wrapper && \
+            -f -p ../../galeb-$$service-${VERSION}-1.el7.noarch.rpm *jar wrapper && \
         cd -; \
     done
 
