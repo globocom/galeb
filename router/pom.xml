@@ -205,6 +205,21 @@
                         -Dcom.sun.management.jmxremote
                         -Dcom.sun.management.jmxremote.authenticate=false
                         -Dcom.sun.management.jmxremote.ssl=false
+                        -XX:+PerfDisableSharedMem
+                        -XX:NewRatio=2
+                        -XX:+UseG1GC
+                        -XX:+UnlockExperimentalVMOptions
+                        -XX:+HeapDumpOnOutOfMemoryError
+                        -XX:-DisableExplicitGC
+                        -XX:+AggressiveOpts
+                        -Xnoclassgc
+                        -XX:+UseNUMA
+                        -XX:+UseFastAccessorMethods
+                        -XX:ReservedCodeCacheSize=48m
+                        -XX:+UseStringCache
+                        -XX:+UseStringDeduplication
+                        -XX:MaxGCPauseMillis=200
+                        -XX:GCPauseIntervalMillis=8000
                     </argLine>
                     <includes>
                         <include>**/suites/*</include>
@@ -224,6 +239,21 @@
                         -Dcom.sun.management.jmxremote.authenticate=false
                         -Dcom.sun.management.jmxremote.ssl=false
                         -Dcom.sun.management.jmxremote.port=${jmx.port}
+                        -XX:+PerfDisableSharedMem
+                        -XX:NewRatio=2
+                        -XX:+UseG1GC
+                        -XX:+UnlockExperimentalVMOptions
+                        -XX:+HeapDumpOnOutOfMemoryError
+                        -XX:-DisableExplicitGC
+                        -XX:+AggressiveOpts
+                        -Xnoclassgc
+                        -XX:+UseNUMA
+                        -XX:+UseFastAccessorMethods
+                        -XX:ReservedCodeCacheSize=48m
+                        -XX:+UseStringCache
+                        -XX:+UseStringDeduplication
+                        -XX:MaxGCPauseMillis=200
+                        -XX:GCPauseIntervalMillis=8000
                     </jvmArguments>
                 </configuration>
             </plugin>
