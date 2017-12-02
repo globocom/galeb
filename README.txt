@@ -1,32 +1,31 @@
 GALEB 4
 
-1. Using etcd docker service
+1. Using Makefile
 
-# docker run --rm --name myetcd -d -p 2379:2379 -p 2380:2380 -p 4001:4001 -p 7001:7001 elcolio/etcd:latest -name etcd0
+1.1. Building docs (requires Doxygen)
 
-2. Using statsd docker service
+# make doc
 
-# docker run -d --rm --name mystatsd -p 8125:8125 -p 8125:8125/udp -v /tmp:/tmp -e STREAM_CMD="tee /tmp/out" sstarcher/statsite
+1.2. Building RH7/EL7 rpm (requires FPM)
 
-3. Accessing etcd docker service
+# make dist
 
-# docker exec -it myetcd /bin/sh
+2. Installing
 
-4. Defining routes in etcd service
+# mvn clean install -DskipTests
 
-# etcdctl mkdir /GALEB/virtualhosts/test.com/rules/$(echo '/' | base64)
-# etcdctl set /GALEB/virtualhosts/test.com/rules/$(echo '/' | base64)/order 0
-# etcdctl set /GALEB/virtualhosts/test.com/rules/$(echo '/' | base64)/target 0
-# etcdctl set /GALEB/virtualhosts/test.com/rules/$(echo '/' | base64)/type PATH
-# etcdctl set /GALEB/virtualhosts/test.com/allow 127.0.0.0/8,172.16.0.1
-# etcdctl mkdir /GALEB/pools/0/targets
-# etcdctl set /GALEB/pools/0/loadbalance ROUNDROBIN
-# etcdctl set /GALEB/pools/0/targets/0 http://127.0.0.1:8080
+3. Running
 
-5. Force ALL update
+3.1. Running router
 
-# etcdctl set /GALEB/force_update 0 --ttl 5
+# export ROUTER_PORT=8080
+# export MANAGER_URL=http://manager.localhost:8000
+# export GROUP_ID=blue
+# export ENVIRONMENT_NAME=desenv
+# cd router && mvn spring-boot:run
 
-6. Force update
+3.2. Running health
 
-# etcdctl set /GALEB/virtualhosts/test.com/force_update test.com --ttl 5
+# export BROKER_CONN="tcp://broker.localhost:61616?blockOnDurableSend=false&consumerWindowSize=0&protocols=Core"
+# cd health && mvn spring-boot:run
+

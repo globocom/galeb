@@ -14,15 +14,11 @@
  * limitations under the License.
  */
 
-/**
- * 
- */
-
 package io.galeb.router.client;
 
+import io.galeb.router.ResponseCodeOnError;
 import io.galeb.router.client.hostselectors.HostSelector;
 import io.galeb.router.client.hostselectors.RoundRobinHostSelector;
-import io.galeb.router.ResponseCodeOnError;
 import io.undertow.UndertowLogger;
 import io.undertow.client.ClientConnection;
 import io.undertow.client.ClientStatistics;
@@ -30,7 +26,13 @@ import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.ServerConnection;
 import io.undertow.server.handlers.Cookie;
-import io.undertow.server.handlers.proxy.*;
+import io.undertow.server.handlers.proxy.ConnectionPoolErrorHandler;
+import io.undertow.server.handlers.proxy.ConnectionPoolManager;
+import io.undertow.server.handlers.proxy.ExclusivityChecker;
+import io.undertow.server.handlers.proxy.ProxyCallback;
+import io.undertow.server.handlers.proxy.ProxyClient;
+import io.undertow.server.handlers.proxy.ProxyConnection;
+import io.undertow.server.handlers.proxy.ProxyConnectionPool;
 import io.undertow.util.AttachmentKey;
 import io.undertow.util.AttachmentList;
 import io.undertow.util.CopyOnWriteMap;
@@ -47,9 +49,13 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 
-import static io.undertow.server.handlers.proxy.ProxyConnectionPool.AvailabilityType.*;
+import static io.undertow.server.handlers.proxy.ProxyConnectionPool.AvailabilityType.AVAILABLE;
+import static io.undertow.server.handlers.proxy.ProxyConnectionPool.AvailabilityType.FULL;
+import static io.undertow.server.handlers.proxy.ProxyConnectionPool.AvailabilityType.FULL_QUEUE;
+import static io.undertow.server.handlers.proxy.ProxyConnectionPool.AvailabilityType.PROBLEM;
 import static org.xnio.IoUtils.safeClose;
 
+@SuppressWarnings({"WeakerAccess", "UnusedReturnValue", "unused", "SameParameterValue"})
 public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedProxyClient {
 
     private final Log logger = LogFactory.getLog(this.getClass());
@@ -166,7 +172,6 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedPr
         return addHost(host, jvmRoute, null);
     }
 
-
     public synchronized ExtendedLoadBalancingProxyClient addHost(final URI host, String jvmRoute, XnioSsl ssl) {
 
         Host h = new Host(jvmRoute, null, host, ssl, OptionMap.EMPTY);
@@ -174,13 +179,13 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedPr
         Host[] newHosts = new Host[existing.length + 1];
         System.arraycopy(existing, 0, newHosts, 0, existing.length);
         newHosts[existing.length] = h;
+        sortHosts(newHosts);
         this.hosts = newHosts;
         if (jvmRoute != null) {
             this.routes.put(jvmRoute, h);
         }
         return this;
     }
-
 
     public synchronized ExtendedLoadBalancingProxyClient addHost(final URI host, String jvmRoute, XnioSsl ssl, OptionMap options) {
         return addHost(null, host, jvmRoute, ssl, options);
@@ -193,6 +198,7 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedPr
         Host[] newHosts = new Host[existing.length + 1];
         System.arraycopy(existing, 0, newHosts, 0, existing.length);
         newHosts[existing.length] = h;
+        sortHosts(newHosts);
         this.hosts = newHosts;
         if (jvmRoute != null) {
             this.routes.put(jvmRoute, h);
@@ -286,7 +292,9 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedPr
                 } else if (available == FULL && full == null) {
                     full = selected;
                 } else if ((available == PROBLEM || available == FULL_QUEUE) && problem == null) {
-                    logger.warn("Host " + selected.getUri().toString() + " ignored: PROBLEM (scheduled to retry after " + problemServerRetry + " seconds)");
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Host " + selected.getUri().toString() + " ignored: PROBLEM (scheduled to retry after " + problemServerRetry + " seconds)");
+                    }
                     problem = selected;
                 }
             }
@@ -323,15 +331,21 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedPr
         return null;
     }
 
+    private void sortHosts(final Host[] newHosts) {
+        Arrays.sort(newHosts, Host::compareTo);
+    }
+
+    @Override
     public boolean isHostsEmpty() {
         return hosts.length == 0;
     }
 
+    @Override
     public synchronized void removeAllHosts() {
         Arrays.stream(hosts).map(Host::getUri).forEach(this::removeHost);
     }
 
-    public class Host extends ConnectionPoolErrorHandler.SimpleConnectionPoolErrorHandler implements ConnectionPoolManager {
+    public class Host extends ConnectionPoolErrorHandler.SimpleConnectionPoolErrorHandler implements ConnectionPoolManager, Comparable<Host> {
         final ProxyConnectionPool connectionPool;
         final String jvmRoute;
         final URI uri;
@@ -384,6 +398,11 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient, ExtendedPr
 
         public ClientStatistics getClientStatistics() {
             return connectionPool.getClientStatistics();
+        }
+
+        @Override
+        public int compareTo(Host other) {
+            return uri.compareTo(other.getUri());
         }
     }
 

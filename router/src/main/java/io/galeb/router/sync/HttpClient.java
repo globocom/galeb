@@ -16,12 +16,23 @@
 
 package io.galeb.router.sync;
 
+import io.galeb.core.enums.SystemEnv;
 import io.galeb.core.logutils.ErrorLogger;
+import io.netty.handler.codec.http.HttpMethod;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.asynchttpclient.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static io.galeb.core.logutils.ErrorLogger.logError;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+
+import static io.galeb.router.sync.GalebHttpHeaders.*;
+import static io.undertow.util.Headers.IF_NONE_MATCH_STRING;
 import static org.asynchttpclient.Dsl.asyncHttpClient;
 import static org.asynchttpclient.Dsl.config;
 
@@ -29,7 +40,10 @@ public class HttpClient {
 
     public static final String NOT_MODIFIED = "NOT_MODIFIED";
 
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private static final Logger LOGGER = LoggerFactory.getLogger(HttpClient.class);
+
+    private static final String ENVIRONMENT_NAME = SystemEnv.ENVIRONMENT_NAME.getValue();
+    private static final String GROUP_ID = SystemEnv.GROUP_ID.getValue();
 
     private final AsyncHttpClient asyncHttpClient;
 
@@ -44,11 +58,12 @@ public class HttpClient {
                 .setMaxConnectionsPerHost(100).build());
     }
 
-    public void getResponseBodyWithToken(String url, String token, String etag, OnCompletedCallBack callBack) {
+    @SuppressWarnings("FutureReturnValueIgnored")
+    public void getResponseBody(String url, String etag, OnCompletedCallBack callBack) {
         try {
             RequestBuilder requestBuilder = new RequestBuilder().setUrl(url)
-                    .setHeader("If-None-Match", etag)
-                    .setHeader("x-auth-token", token);
+                    .setHeader(X_GALEB_GROUP_ID, GROUP_ID)
+                    .setHeader(IF_NONE_MATCH_STRING, etag);
             asyncHttpClient.executeRequest(requestBuilder.build(), new AsyncCompletionHandler<Response>() {
                 @Override
                 public Response onCompleted(Response response) throws Exception {
@@ -67,7 +82,7 @@ public class HttpClient {
                 }
             });
         } catch (NullPointerException e) {
-            logger.error("Token is NULL (auth problem?)");
+            LOGGER.error("Token is NULL (auth problem?)");
             callBack.onCompleted(null);
         } catch (Exception e) {
             ErrorLogger.logError(e, this.getClass());
@@ -75,20 +90,55 @@ public class HttpClient {
         }
     }
 
-    public String getResponseBodyWithAuth(String user, String pass, String url) {
-        RequestBuilder requestTokenBuilder = new RequestBuilder().setUrl(url)
-                .setRealm(new Realm.Builder(user, pass).setScheme(Realm.AuthScheme.BASIC).build());
+    private static String localIpsEncoded() {
+        final List<String> ipList = new ArrayList<>();
         try {
-            Response response = asyncHttpClient.executeRequest(requestTokenBuilder).get();
-            if (response.getStatusCode() == 401) {
-                logger.error("401 Unauthorized: \"" + user + "\" auth failed");
+            Enumeration<NetworkInterface> ifs = NetworkInterface.getNetworkInterfaces();
+            while (ifs.hasMoreElements()) {
+                NetworkInterface localInterface = ifs.nextElement();
+                if (!localInterface.isLoopback() && localInterface.isUp()) {
+                    Enumeration<InetAddress> ips = localInterface.getInetAddresses();
+                    while (ips.hasMoreElements()) {
+                        InetAddress ipaddress = ips.nextElement();
+                        if (ipaddress instanceof Inet4Address) {
+                            ipList.add(ipaddress.getHostAddress());
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error(ExceptionUtils.getStackTrace(e));
+        }
+        String ip = String.join("-", ipList);
+        if (ip == null || "".equals(ip)) {
+            ip = "undef-" + System.currentTimeMillis();
+        }
+        return ip.replaceAll("[:%]", "");
+    }
+
+    public void post(String url, String etag) {
+        RequestBuilder requestBuilder = new RequestBuilder().setUrl(url)
+                .setMethod(HttpMethod.POST.name())
+                .setHeader(IF_NONE_MATCH_STRING, etag)
+                .setHeader(X_GALEB_GROUP_ID, GROUP_ID)
+                .setHeader(X_GALEB_ENVIRONMENT, ENVIRONMENT_NAME)
+                .setHeader(X_GALEB_LOCAL_IP, localIpsEncoded())
+                .setBody("{\"router\":{\"group_id\":\"" + GROUP_ID + "\",\"env\":\"" + ENVIRONMENT_NAME + "\",\"etag\":\"" + etag + "\"}}");
+        asyncHttpClient.executeRequest(requestBuilder.build(), new AsyncCompletionHandler<String>() {
+            @Override
+            public String onCompleted(Response response) throws Exception {
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("post onCompleted done");
+                }
                 return "";
             }
-            return response.getResponseBody();
-        } catch (Exception e) {
-            logError(e, this.getClass());
-        }
-        return "";
+
+            @Override
+            public void onThrowable(Throwable t) {
+                LOGGER.error(ExceptionUtils.getStackTrace(t));
+            }
+        });
     }
 
     public interface OnCompletedCallBack {

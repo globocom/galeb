@@ -29,9 +29,9 @@ public enum SystemEnv {
     // COMMON
 
     /**
-     * Cluster ID (same as Farm ID).
+     * Group ID (same as color and/or cluster_id, if applicable).
      */
-    CLUSTER_ID            ("CLUSTER_ID",            "GALEB"),
+    GROUP_ID              ("GROUP_ID",              "UNDEF"),
 
     /**
      * Syslog server host.
@@ -43,63 +43,63 @@ public enum SystemEnv {
      */
     SYSLOG_PORT           ("SYSLOG_PORT",           514),
 
-    /**
-     * Galeb Manager URL
-     */
-    MANAGER_URL           ("MANAGER_URL",           "http://127.0.0.1:8000"),
-
-    /**
-     * Galeb Manager user
-     */
-    MANAGER_USER          ("MANAGER_USER",          "user"),
-
-    /**
-     * Galeb Manager password
-     */
-    MANAGER_PASS          ("MANAGER_PASS",          "password"),
-
-    /**
-     * Broker Url Connection
-     */
-    BROKER_CONN           ("BROKER_CONN",           "tcp://localhost:61616?blockOnDurableSend=false&consumerWindowSize=0&protocols=Core"),
-
-    /**
-     * Broker user
-     */
-    BROKER_USER           ("BROKER_USER",           "guest"),
-
-    /**
-     * Broker password
-     */
-    BROKER_PASS           ("BROKER_PASS",           "guest"),
-
-    /**
-     * Enable JMS HA
-     */
-    BROKER_HA             ("BROKER_HA",             Boolean.FALSE),
-
-    /**
-     * Set message's lifetime (in milliseconds) of the message when sending.
-     */
-    JMS_TIMEOUT           ("JMS_TIMEOUT",           30000),
-
 
     // HEALTHCHECKER
 
     /**
      * Service healthchecker port.
      */
-    HEALTH_PORT           ("HEALTH_PORT",           7000),
+    HEALTH_PORT              ("HEALTH_PORT",               7000),
 
     /**
      * AMQP Queue name
      */
-    QUEUE_NAME            ("QUEUE_NAME",            "galeb-health"),
+    QUEUE_NAME               ("QUEUE_NAME",               "galeb-health"),
 
     /**
      * Tester request timeout (ms)
      */
-    TEST_CONN_TIMEOUT     ("TEST_CONN_TIMEOUT",     2000),
+    TEST_CONN_TIMEOUT        ("TEST_CONN_TIMEOUT",        2000),
+
+    /**
+     * Tester request timeout (ms)
+     */
+    TEST_KEEPALIVE           ("TEST_KEEPALIVE",           true),
+
+    /**
+     * Tester pooled connection idle timeout (ms)
+     */
+    TEST_POOLED_IDLE_TIMEOUT ("TEST_POOLED_IDLE_TIMEOUT", 5),
+
+    /**
+     * Tester max conn per host
+     */
+    TEST_MAXCONN_PER_HOST    ("TEST_MAXCONN_PER_HOST",    100),
+
+    /**
+     * Broker Url Connection
+     */
+    BROKER_CONN              ("BROKER_CONN",              "tcp://localhost:61616?blockOnDurableSend=false&consumerWindowSize=0&protocols=Core"),
+
+    /**
+     * Broker user
+     */
+    BROKER_USER              ("BROKER_USER",              "guest"),
+
+    /**
+     * Broker password
+     */
+    BROKER_PASS              ("BROKER_PASS",              "guest"),
+
+    /**
+     * Enable JMS HA
+     */
+    BROKER_HA                ("BROKER_HA",                Boolean.FALSE),
+
+    /**
+     * Set message's lifetime (in milliseconds) of the message when sending.
+     */
+    JMS_TIMEOUT              ("JMS_TIMEOUT",              30000),
 
 
     // ROUTER
@@ -112,22 +112,27 @@ public enum SystemEnv {
     /**
      * Galeb Manager Farm -> Environment Name
      */
-    ENVIRONMENT_NAME     ("ENVIRONMENT_NAME",       ""),
+    ENVIRONMENT_NAME      ("ENVIRONMENT_NAME",       ""),
 
     /**
-     * Etcd API full url (schema+host:port).
+     * Galeb Manager URL
      */
-    ETCD_SERVER           ("ETCD_SERVER",           "http://127.0.0.1:2379"),
+    MANAGER_URL           ("MANAGER_URL",           "http://127.0.0.1:8000"),
 
     /**
-     * Etcd register path (useful to discovery service)
+     * Galeb Manager Map Path
      */
-    ETCD_REGISTER_PATH    ("ETCD_REGISTER_PATH",    "/routers"),
+    MANAGER_MAP_PATH      ("MANAGER_MAP_PATH",      "/virtualhostscached/"),
+
+    /**
+     * Galeb Manager Routers Path
+     */
+    MANAGER_ROUTERS_PATH  ("MANAGER_ROUTERS_PATH",  "/routers"),
 
     /**
      * Statsd prefix.
      */
-    STATSD_PREFIX         ("STATSD_PREFIX",         CLUSTER_ID.getValue()),
+    STATSD_PREFIX         ("STATSD_PREFIX",         "galeb"),
 
     /**
      * Statsd server host.
@@ -188,6 +193,11 @@ public enum SystemEnv {
     POOL_MAX_REQUEST_TIME ("POOL_MAX_REQUEST_TIME", -1),
 
     /**
+     *  The frontend Max Connections
+     */
+    FE_MAXCONN            ("FE_MAXCONN",              20000),
+
+    /**
      * Enable AccessLog (http response register)
      */
     ENABLE_ACCESSLOG      ("ENABLE_ACCESSLOG",      Boolean.TRUE),
@@ -213,19 +223,14 @@ public enum SystemEnv {
     REWRITE_HOST_HEADER   ("REWRITE_HOST_HEADER",   Boolean.FALSE),
 
     /**
+     * Request header to store a UUIDv4 representing the current request, if not already set.
+     */
+    REQUESTID_HEADER      ("REQUESTID_HEADER",      ""),
+
+    /**
      * HashSourceIpHostSelector exclusive use. Dont uses Header X-FORWARDED-FOR as Hash key.
      */
     IGNORE_XFORWARDED_FOR ("IGNORE_XFORWARDED_FOR", Boolean.FALSE),
-
-    /**
-     * Consistent Hash number of replicas (HashHostSelector exclusive use).
-     */
-    HASH_NUM_REPLICAS     ("HASH_NUM_REPLICAS",     100),
-
-    /**
-     * Consistent Hash Algorithm (HashHostSelector exclusive use).
-     */
-    HASH_ALGORITHM        ("HASH_ALGORITHM",        "MURMUR3_32"),
 
     /**
      * External Data provider tcp max connections

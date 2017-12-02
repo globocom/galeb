@@ -17,11 +17,11 @@
 package io.galeb.router.handlers;
 
 import io.galeb.router.configurations.ManagerClientCacheConfiguration.ManagerClientCache;
-import io.galeb.router.discovery.ExternalDataService;
 import io.galeb.router.services.UpdaterService;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.util.Headers;
+import io.undertow.util.StatusCodes;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -59,6 +59,7 @@ public class PingHandler implements HttpHandler {
         exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/plain");
         exchange.getResponseHeaders().put(Headers.SERVER, "GALEB");
         String statusBody = getStatusBody(hasNoUpdate);
+        exchange.setStatusCode(StatusCodes.OK);
         exchange.getResponseSender().send(statusBody);
         if (!hasNoUpdate) {
             updaterService.sched();

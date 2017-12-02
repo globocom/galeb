@@ -32,6 +32,7 @@ public enum ResponseCodeOnError {
     HOSTS_EMPTY                      ("HOSTS_EMPTY",                      502),
     IPACL_FORBIDDEN                  ("FORBIDDEN",                        403),
     ROOT_HANDLER_FAILED              ("ROOT_HANDLER_FAILED",              503),
+    PROXY_HANDLER_NULL               ("PROXY_HANDLER_NULL",               503),
     COULD_NOT_RESOLVE_BACKEND        ("COULD_NOT_RESOLVE_BACKEND",        0), // HttpStatus NOT modifiable
     QUEUED_REQUEST_FAILED            ("QUEUED_REQUEST_FAILED",            0); // HttpStatus NOT modifiable
 
@@ -39,8 +40,8 @@ public enum ResponseCodeOnError {
         public static final HttpString X_GALEB_ERROR = tryFromString("X-Galeb-Error");
     }
 
-    private String message;
-    private int statusCode;
+    private final String message;
+    private final int statusCode;
 
     ResponseCodeOnError(final String message, final int statusCode) {
         this.message = message;

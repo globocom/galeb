@@ -17,14 +17,13 @@
 package io.galeb.router.sync;
 
 import com.google.common.collect.Sets;
-import io.galeb.core.entity.Rule;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import io.galeb.core.enums.SystemEnv;
 import io.galeb.core.entity.AbstractEntity;
 import io.galeb.core.entity.VirtualHost;
-import io.galeb.core.entity.util.Cloner;
 import io.galeb.core.logutils.ErrorLogger;
-import io.galeb.router.discovery.ExternalDataService;
-import io.galeb.router.sync.structure.FullVirtualhosts;
+import io.galeb.router.VirtualHostsNotExpired;
 import io.galeb.router.client.ExtendedProxyClient;
 import io.galeb.router.configurations.ManagerClientCacheConfiguration.ManagerClientCache;
 import io.galeb.router.handlers.PathGlobHandler;
@@ -44,55 +43,45 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static io.galeb.router.handlers.PoolHandler.PROP_DISCOVERED_MEMBERS_SIZE;
-
 public class Updater {
     public static final String FULLHASH_PROP = "fullhash";
+    public static final String ALIAS_OF      = "alias_of";
     public static final long   WAIT_TIMEOUT  = 10000; // ms
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private final Gson gson = new GsonBuilder()
+            .serializeNulls()
+            .setLenient()
+            .setDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+            .create();
 
     private final ManagerClient managerClient;
     private final ManagerClientCache cache;
-    private final ExternalDataService externalDataService;
     private final NameVirtualHostHandler nameVirtualHostHandler;
-    private final Cloner cloner = new Cloner();
 
     private final String envName = SystemEnv.ENVIRONMENT_NAME.getValue();
-
-    private int discoveredMembersSize = 1;
-    private int newDiscoveredMembersSize = 1;
 
     private int count = 0;
 
     public Updater(final NameVirtualHostHandler nameVirtualHostHandler,
                    final ManagerClient managerClient,
-                   final ManagerClientCache cache,
-                   final ExternalDataService externalDataService) {
+                   final ManagerClientCache cache) {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
         this.managerClient = managerClient;
         this.cache = cache;
-        this.externalDataService = externalDataService;
     }
 
     public void sync() {
-        externalDataService.register();
-        newDiscoveredMembersSize = Math.max(externalDataService.members().size(), 1);
         AtomicBoolean wait = new AtomicBoolean(true);
         final ManagerClient.ResultCallBack resultCallBack = result -> {
             if (result instanceof String && HttpClient.NOT_MODIFIED.equals(result)) {
                 logger.info("Environment " + envName + ": " + result);
-                if (newDiscoveredMembersSize != discoveredMembersSize) {
-                    cache.values().forEach(virtualHost -> {
-                        applyPropDiscoveryMembersSize(virtualHost);
-                        cache.put(virtualHost.getName(), virtualHost);
-                    });
-                }
             } else {
-                FullVirtualhosts virtualhostsFromManager = result instanceof FullVirtualhosts ? (FullVirtualhosts) result : null;
+                ManagerClient.Virtualhosts virtualhostsFromManager = result instanceof ManagerClient.Virtualhosts ? (ManagerClient.Virtualhosts) result : null;
                 if (virtualhostsFromManager != null) {
                     final List<VirtualHost> virtualhosts = processVirtualhostsAndAliases(virtualhostsFromManager);
                     logger.info("Processing " + virtualhosts.size() + " virtualhost(s): Check update initialized");
+                    updateEtagIfNecessary(virtualhosts);
                     cleanup(virtualhosts);
                     virtualhosts.forEach(this::updateCache);
                     logger.info("Processed " + count + " virtualhost(s): Done");
@@ -101,14 +90,10 @@ public class Updater {
                 }
             }
             count = 0;
-            if (discoveredMembersSize != newDiscoveredMembersSize) {
-                logger.warn("DiscoveredMembersSize changed from " + discoveredMembersSize + " to "
-                        + newDiscoveredMembersSize + ". Expiring ALL handlers");
-                discoveredMembersSize = newDiscoveredMembersSize;
-            }
             wait.set(false);
         };
         String etag = cache.etag();
+        managerClient.register(etag);
         managerClient.getVirtualhosts(envName, etag, resultCallBack);
         // force wait
         long currentWaitTimeOut = System.currentTimeMillis();
@@ -122,13 +107,24 @@ public class Updater {
         }
     }
 
-    private List<VirtualHost> processVirtualhostsAndAliases(final FullVirtualhosts virtualhostsFromManager) {
+    private void updateEtagIfNecessary(final List<VirtualHost> virtualhosts) {
+        final String etag;
+        if (!virtualhosts.isEmpty()) {
+            etag = virtualhosts.get(0).getEnvironment().getProperties().get(FULLHASH_PROP);
+        } else {
+            etag = ManagerClientCache.EMPTY;
+        }
+        cache.updateEtag(etag);
+    }
+
+    private List<VirtualHost> processVirtualhostsAndAliases(final ManagerClient.Virtualhosts virtualhostsFromManager) {
         final Set<VirtualHost> aliases = new HashSet<>();
-        final List<VirtualHost> virtualhosts = Arrays.stream(virtualhostsFromManager._embedded.s)
+        final List<VirtualHost> virtualhosts = Arrays.stream(virtualhostsFromManager.virtualhosts)
                 .map(v -> {
                     v.getAliases().forEach(aliasName -> {
-                        VirtualHost virtualHostAlias = cloner.copyVirtualHost(v);
+                        VirtualHost virtualHostAlias = gson.fromJson(gson.toJson(v), VirtualHost.class);
                         virtualHostAlias.setName(aliasName);
+                        virtualHostAlias.getProperties().put(ALIAS_OF, v.getName());
                         aliases.add(virtualHostAlias);
                     });
                     return v;
@@ -154,45 +150,39 @@ public class Updater {
 
     private void updateCache(VirtualHost virtualHost) {
         String virtualhostName = virtualHost.getName();
-        if (newDiscoveredMembersSize == discoveredMembersSize) {
-            VirtualHost oldVirtualHost = cache.get(virtualhostName);
-            if (oldVirtualHost != null) {
-                String newFullHash = virtualHost.getProperties().get(FULLHASH_PROP);
-                String currentFullhash = oldVirtualHost.getProperties().get(FULLHASH_PROP);
-                if (currentFullhash != null && currentFullhash.equals(newFullHash)) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Virtualhost " + virtualhostName + " not changed.");
-                    }
-                    count++;
-                    return;
-                } else {
-                    logger.warn("Virtualhost " + virtualhostName + " changed. Updating cache.");
+        VirtualHost oldVirtualHost = cache.get(virtualhostName);
+        if (oldVirtualHost != null) {
+            String newFullHash = virtualHost.getProperties().get(FULLHASH_PROP);
+            String currentFullhash = oldVirtualHost.getProperties().get(FULLHASH_PROP);
+            if (currentFullhash != null && currentFullhash.equals(newFullHash)) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Virtualhost " + virtualhostName + " not changed.");
                 }
+                count++;
+                return;
+            } else {
+                logger.warn("Virtualhost " + virtualhostName + " changed. Updating cache.");
             }
         }
-        applyPropDiscoveryMembersSize(virtualHost);
         cache.put(virtualhostName, virtualHost);
         expireHandlers(virtualhostName);
         count++;
     }
 
-    private void applyPropDiscoveryMembersSize(final VirtualHost virtualHost) {
-        applyPropDiscoveryMembersSize(virtualHost.getRuleDefault());
-        virtualHost.getRules().forEach(this::applyPropDiscoveryMembersSize);
-    }
-
-    private void applyPropDiscoveryMembersSize(final Rule rule) {
-        if (rule != null) {
-            rule.getPool().getProperties().put(PROP_DISCOVERED_MEMBERS_SIZE, String.valueOf(newDiscoveredMembersSize));
-        }
-    }
-
     private void expireHandlers(String virtualhostName) {
-        if ("__ping__".equals(virtualhostName) || "__cache__".equals(virtualhostName)) return;
+        if (Arrays.stream(VirtualHostsNotExpired.values()).anyMatch(s -> s.getHost().equals(virtualhostName))) return;
         if (nameVirtualHostHandler.getHosts().containsKey(virtualhostName)) {
             logger.warn("Virtualhost " + virtualhostName + ": Rebuilding handlers.");
             cleanUpNameVirtualHostHandler(virtualhostName);
             nameVirtualHostHandler.removeHost(virtualhostName);
+        }
+    }
+
+    private void cleanPoolHandler(final PoolHandler poolHandler) {
+        final ProxyHandler proxyHandler = poolHandler.getProxyHandler();
+        if (proxyHandler != null) {
+            final ExtendedProxyClient proxyClient = (ExtendedProxyClient) proxyHandler.getProxyClient();
+            proxyClient.removeAllHosts();
         }
     }
 
@@ -206,17 +196,18 @@ public class Updater {
             ruleTargetHandler = (RuleTargetHandler) ((IPAddressAccessControlHandler) handler).getNext();
         }
         if (ruleTargetHandler != null) {
-            cleanUpPathGlobHandler(ruleTargetHandler.getPathGlobHandler());
+            final PoolHandler poolHandler = ruleTargetHandler.getPoolHandler();
+            if (poolHandler != null) {
+                cleanPoolHandler(poolHandler);
+            } else {
+                cleanUpPathGlobHandler(ruleTargetHandler.getPathGlobHandler());
+            }
         }
     }
 
     private void cleanUpPathGlobHandler(final PathGlobHandler pathGlobHandler) {
         pathGlobHandler.getPaths().forEach((k, poolHandler) -> {
-            final ProxyHandler proxyHandler = ((PoolHandler) poolHandler).getProxyHandler();
-            if (proxyHandler != null) {
-                final ExtendedProxyClient proxyClient = (ExtendedProxyClient) proxyHandler.getProxyClient();
-                proxyClient.removeAllHosts();
-            }
+            cleanPoolHandler((PoolHandler) poolHandler);
         });
         pathGlobHandler.clear();
     }
